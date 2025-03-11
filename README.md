@@ -11,7 +11,7 @@ A comprehensive warehouse management system with RFID tracking capabilities, des
 - **Product Management**: Comprehensive product catalog with categorization and barcode support
 - **Shelf Organization**: Assign categories to cabinets and shelves for organized storage
 - **User Authentication**: Secure access control with role-based permissions
-- **Transaction Logging**: Complete history of all inventory movements
+- **Transaction Logging**: Complete history of all inventory movements with operator tracking (who took what, when, and how much)
 - **Multiple Deployment Options**: Docker containers or traditional server deployment
 
 ## System Architecture
