@@ -10,7 +10,9 @@ RUN pip install --no-cache-dir \
     SQLAlchemy==1.4.23 \
     Flask-Migrate==3.1.0 \
     python-dotenv==0.19.1 \
-    opcua==0.98.13
+    opcua==0.98.13 \
+    cryptography==36.0.0
+
 
 # Copy requirements.txt for reference (but we've already installed fixed versions)
 COPY requirements.txt .
