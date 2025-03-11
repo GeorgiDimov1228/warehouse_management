@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Warehouse Management System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            width: 90%;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: #333;
+            color: white;
+            padding: 15px 0;
+            margin-bottom: 20px;
+        }
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 90%;
+            margin: 0 auto;
+        }
+        nav ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+        }
+        nav ul li {
+            margin-right: 15px;
+        }
+        nav ul li a {
+            color: white;
+            text-decoration: none;
+            padding: 5px;
+        }
+        nav ul li a:hover {
+            text-decoration: underline;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4CAF50;
+            margin: 10px 0;
+        }
+        .stat-label {
+            color: #777;
+            font-size: 0.9em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        .section-title {
+            margin: 30px 0 15px 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>Warehouse Management</h1>
+            <nav>
+                <ul>
+                    <li><a href="{{ url_for('product.dashboard') }}">Dashboard</a></li>
+                    <li><a href="{{ url_for('product.index') }}">Products</a></li>
+                    <li><a href="{{ url_for('category.index') }}">Categories</a></li>
+                    <li><a href="{{ url_for('cabinet.index') }}">Cabinets</a></li>
+                    <li><a href="{{ url_for('auth.logout') }}">Logout</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <h2>Dashboard</h2>
+        
+        <div class="dashboard-grid">
+            <div class="card">
+                <div class="stat-label">Total Products</div>
+                <div class="stat-value">{{ product_count }}</div>
+            </div>
+            
+            <div class="card">
+                <div class="stat-label">Total Inventory Items</div>
+                <div class="stat-value">{{ total_quantity }}</div>
+            </div>
+            
+            <div class="card">
+                <div class="stat-label">OPC UA Status</div>
+                <div class="stat-value" id="opcua-status">Checking...</div>
+            </div>
+        </div>
+
+        <h3 class="section-title">Products by Category</h3>
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Product Count</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for category in products_by_category %}
+                    <tr>
+                        <td>{{ category.category }}</td>
+                        <td>{{ category.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <h3 class="section-title">Recent Transactions</h3>
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Time</th>
+                        <th>User</th>
+                        <th>Product</th>
+                        <th>Quantity</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transaction in recent_transactions %}
+                    <tr>
+                        <td>{{ transaction.id }}</td>
+                        <td>{{ transaction.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                        <td>{{ transaction.username }}</td>
+                        <td>{{ transaction.product_name }}</td>
+                        <td>{{ transaction.quantity }}</td>
+                        <td>{{ transaction.transaction_type }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Check OPC UA status
+        fetch('/opcua/status')
+            .then(response => {
+                if (response.status === 401) {
+                    return { status: 'Unauthorized' };
+                }
+                return response.json();
+            })
+            .then(data => {
+                const statusElem = document.getElementById('opcua-status');
+                if (data.status === 'Connected') {
+                    statusElem.textContent = 'Connected';
+                    statusElem.style.color = '#4CAF50';
+                } else if (data.status === 'Unauthorized') {
+                    statusElem.textContent = 'Unauthorized';
+                    statusElem.style.color = '#FFA500';
+                } else {
+                    statusElem.textContent = 'Disconnected';
+                    statusElem.style.color = '#FF0000';
+                }
+            })
+            .catch(error => {
+                document.getElementById('opcua-status').textContent = 'Error';
+                document.getElementById('opcua-status').style.color = '#FF0000';
+                console.error('Error checking OPC UA status:', error);
+            });
+    </script>
+</body>
+</html>

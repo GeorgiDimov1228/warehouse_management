@@ -10,17 +10,21 @@ opcua_bp = Blueprint('opcua', __name__, url_prefix='/opcua')
 @opcua_bp.route('/status', methods=['GET'])
 def opcua_status():
     """Check OPC UA connection status"""
-    # Verify authentication for sensitive operations
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
+    # Allow status check without authentication for dashboard display
+    try:
+        client = connect_opcua_client()
+        if client:
+            try:
+                client.disconnect()
+            except:
+                pass
+            return jsonify({'status': 'Connected'})
         
-    client = connect_opcua_client()
-    if client:
-        client.disconnect()
-        return jsonify({'status': 'Connected'})
-    
-    logging.warning("Failed to connect to OPC UA server")
-    return jsonify({'status': 'Disconnected', 'error': 'Cannot connect to OPC UA server'})
+        logging.warning("Failed to connect to OPC UA server")
+        return jsonify({'status': 'Disconnected', 'error': 'Cannot connect to OPC UA server'})
+    except Exception as e:
+        logging.error(f"Error in OPCUA status check: {str(e)}")
+        return jsonify({'status': 'Error', 'error': str(e)})
 
 @opcua_bp.route('/read', methods=['POST'])
 def opcua_read():

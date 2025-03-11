@@ -2,14 +2,12 @@ from flask import Flask
 import logging
 import os
 from dotenv import load_dotenv
-from app.services.backup_service import start_backup_thread
-from app.services.opcua_service import start_opcua_server
-from app.models import db, init_db
 
 # Load environment variables from .env file
 load_dotenv()
 
 def create_app(test_config=None):
+    """Create and configure the Flask application"""
     # Create and configure the app
     app = Flask(__name__, instance_relative_config=True)
     
@@ -30,24 +28,13 @@ def create_app(test_config=None):
     
     # Configure logging
     logging.basicConfig(
-        filename=app.config['LOG_FILE'],
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
     
     # Initialize SQLAlchemy database
+    from app.models import db, init_db
     init_db(app)
-    
-    # Initialize database tables
-    with app.app_context():
-        from app.services.database import initialize_database
-        initialize_database()
-    
-    # Start backup thread
-    start_backup_thread()
-    
-    # Start OPC UA server
-    start_opcua_server()
     
     # Register blueprints
     from app.routes.auth import auth_bp
@@ -68,5 +55,30 @@ def create_app(test_config=None):
     @app.route('/health')
     def health_check():
         return {'status': 'healthy'}
+    
+    # Initialize database tables
+    with app.app_context():
+        from app.services.database import initialize_database
+        try:
+            initialize_database()
+        except Exception as e:
+            app.logger.error(f"Database initialization error: {str(e)}")
+    
+    # Start services after app is fully configured
+    @app.before_first_request
+    def start_services():
+        # Start backup thread
+        from app.services.backup_service import start_backup_thread
+        try:
+            start_backup_thread()
+        except Exception as e:
+            app.logger.error(f"Backup service error: {str(e)}")
+        
+        # Start OPC UA server
+        from app.services.opcua_service import start_opcua_server
+        try:
+            start_opcua_server()
+        except Exception as e:
+            app.logger.error(f"OPC UA service error: {str(e)}")
     
     return app
