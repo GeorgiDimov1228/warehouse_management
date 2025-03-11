@@ -2,6 +2,7 @@ from flask import Flask
 import logging
 import os
 from dotenv import load_dotenv
+from flask import redirect, url_for, session
 
 # Load environment variables from .env file
 load_dotenv()
@@ -51,6 +52,16 @@ def create_app(test_config=None):
     app.register_blueprint(rfid_bp)
     app.register_blueprint(cabinet_bp)
     
+
+    @app.route('/')
+    def index():
+        if 'user_id' in session:
+            # If user is logged in, redirect to dashboard
+            return redirect(url_for('product.dashboard'))
+        else:
+            # If not logged in, redirect to login page
+            return redirect(url_for('auth.login'))
+
     # A simple route to check if the app is running
     @app.route('/health')
     def health_check():
