@@ -22,27 +22,27 @@ services:
     restart: always
     environment:
       POSTGRES_DB: warehouse_db
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_USER: warehouse_admin  # Hardcode the username
+      POSTGRES_PASSWORD: Warehouse2025!DatabaseKey
     volumes:
       - warehouse-db-data:/var/lib/postgresql/data
     networks:
       - warehouse-network
 
-  nginx:
-    image: nginx:1.21
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf:/etc/nginx/conf.d
-      - ./nginx/ssl:/etc/nginx/ssl
-      - ./nginx/static:/var/www/static
-    depends_on:
-      - warehouse-app
-    networks:
-      - warehouse-network
+  # nginx:
+  #   image: nginx:1.21
+  #   restart: always
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/conf:/etc/nginx/conf.d
+  #     - ./nginx/ssl:/etc/nginx/ssl
+  #     - ./nginx/static:/var/www/static
+  #   depends_on:
+  #     - warehouse-app
+  #   networks:
+  #     - warehouse-network
 
 volumes:
   warehouse-db-data:
