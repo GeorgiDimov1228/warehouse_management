@@ -1,0 +1,34 @@
+# Core frameworks
+Flask==2.0.1
+Flask-SQLAlchemy==2.5.1
+SQLAlchemy==1.4.23
+Flask-Migrate==3.1.0
+
+# Production WSGI server
+gunicorn==20.1.0
+
+# Database drivers
+psycopg2-binary==2.9.3  # PostgreSQL driver
+SQLAlchemy-Utils==0.38.2
+
+# Environment and configuration
+python-dotenv==0.19.1
+
+# Security
+Werkzeug==2.0.1
+itsdangerous==2.0.1
+pyOpenSSL==21.0.0
+
+# OPC UA
+python-opcua==0.98.13
+
+# RFID and WebSocket support
+websocket-client==1.3.1
+requests==2.28.1
+
+# Testing and development
+pytest==6.2.5
+pytest-flask==1.2.0
+
+# Logging and monitoring
+structlog==21.5.0
