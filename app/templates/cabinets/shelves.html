@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cabinet Shelves</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .btn { background: #4CAF50; color: white; padding: 8px 12px; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h1>Shelves for Cabinet: {{ cabinet.name }}</h1>
+    <a href="{{ url_for('cabinet.index') }}" class="btn" style="background: #2196F3;">Back to Cabinets</a>
+    <a href="{{ url_for('cabinet.add_shelf', cabinet_id=cabinet.id) }}" class="btn">Add Shelf</a>
+    
+    <table style="margin-top: 20px;">
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Categories</th>
+            <th>Multiple Categories Allowed</th>
+            <th>Actions</th>
+        </tr>
+        {% for shelf, categories in shelves %}
+        <tr>
+            <td>{{ shelf.id }}</td>
+            <td>{{ shelf.name }}</td>
+            <td>{{ categories }}</td>
+            <td>{{ 'Yes' if shelf.allows_multiple_categories else 'No' }}</td>
+            <td>
+                <a href="{{ url_for('cabinet.edit_shelf', shelf_id=shelf.id) }}">Edit</a> |
+                <form method="POST" action="{{ url_for('cabinet.delete_shelf', shelf_id=shelf.id) }}" style="display:inline">
+                    <button type="submit" onclick="return confirm('Are you sure?')">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

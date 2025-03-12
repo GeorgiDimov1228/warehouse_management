@@ -44,13 +44,14 @@ def create_app(test_config=None):
     from app.routes.opcua import opcua_bp
     from app.routes.rfid import rfid_bp
     from app.routes.cabinet import cabinet_bp
-    
+    from app.routes.hmi import hmi_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(product_bp)
     app.register_blueprint(category_bp)
     app.register_blueprint(opcua_bp)
     app.register_blueprint(rfid_bp)
     app.register_blueprint(cabinet_bp)
+    app.register_blueprint(hmi_bp)
     
     @app.route('/')
     def index():

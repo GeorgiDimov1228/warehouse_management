@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edit Shelf</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+        .checkbox-group { margin-top: 5px; }
+        .checkbox-group input { width: auto; }
+        .btn { background: #4CAF50; color: white; padding: 8px 16px; border: none; cursor: pointer; }
+        .error { color: red; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <h1>Edit Shelf: {{ shelf.name }}</h1>
+    <h2>Cabinet: {{ cabinet.name }}</h2>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    
+    <form method="POST" action="{{ url_for('cabinet.edit_shelf', shelf_id=shelf.id) }}">
+        <div class="form-group">
+            <label for="name">Shelf Name:</label>
+            <input type="text" id="name" name="name" value="{{ shelf.name }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label>Categories:</label>
+            {% for category in categories %}
+            <div class="checkbox-group">
+                <input type="checkbox" id="category_{{ category.id }}" name="categories" value="{{ category.id }}"
+                       {% if category in shelf.categories %}checked{% endif %}>
+                <label for="category_{{ category.id }}">{{ category.name }}</label>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="form-group checkbox-group">
+            <input type="checkbox" id="allows_multiple_categories" name="allows_multiple_categories"
+                   {% if shelf.allows_multiple_categories %}checked{% endif %}>
+            <label for="allows_multiple_categories">Allow Multiple Categories</label>
+        </div>
+        
+        <div class="form-group">
+            <button type="submit" class="btn">Update Shelf</button>
+            <a href="{{ url_for('cabinet.shelves', cabinet_id=cabinet.id) }}" style="margin-left: 10px;">Cancel</a>
+        </div>
+    </form>
+</body>
+</html>

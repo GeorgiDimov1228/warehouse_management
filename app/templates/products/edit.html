@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edit Product</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input, select, textarea { width: 100%; padding: 8px; box-sizing: border-box; }
+        .btn { background: #4CAF50; color: white; padding: 8px 16px; border: none; cursor: pointer; }
+        .error { color: red; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <h1>Edit Product</h1>
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+    
+    <form method="POST" action="{{ url_for('product.edit', id=product.id) }}">
+        <div class="form-group">
+            <label for="name">Name:</label>
+            <input type="text" id="name" name="name" value="{{ product.name }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="barcode">Barcode:</label>
+            <input type="text" id="barcode" name="barcode" value="{{ product.barcode }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="category_id">Category:</label>
+            <select id="category_id" name="category_id">
+                <option value="">Select Category</option>
+                {% for category in categories %}
+                <option value="{{ category.id }}" {% if category.id == product.category_id %}selected{% endif %}>{{ category.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="rfid_tag">RFID Tag:</label>
+            <input type="text" id="rfid_tag" name="rfid_tag" value="{{ product.rfid_tag }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="quantity">Quantity:</label>
+            <input type="number" id="quantity" name="quantity" value="{{ product.quantity }}" min="0">
+        </div>
+        
+        <div class="form-group">
+            <button type="submit" class="btn">Update Product</button>
+            <a href="{{ url_for('product.index') }}" style="margin-left: 10px;">Cancel</a>
+        </div>
+    </form>
+</body>
+</html>
