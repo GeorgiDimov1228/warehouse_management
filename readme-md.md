@@ -239,7 +239,13 @@ If you encounter database issues, you can reset the database:
 
 With Docker:
 ```bash
-docker-compose exec webapp python -c "from app.services.database import reset_database; from app import create_app; app = create_app(); with app.app_context(): reset_database()"
+docker compose exec warehouse_management-webapp-1 python3 init_db.py
+
+docker exec -it warehouse_management-webapp-1 python3 init_db.py
+docker exec -it warehouse_management-webapp-1 python3 quick_test.py
+
+
+docker compose exec webapp python -c "from app.services.database import reset_database; from app import create_app; app = create_app(); with app.app_context(): reset_database()"
 ```
 
 Without Docker:

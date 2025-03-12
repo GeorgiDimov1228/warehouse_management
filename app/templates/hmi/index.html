@@ -257,4 +257,478 @@
                         <button type="submit" class="btn">Add Product</button>
                     </form>
                     <div id="add-result" class="result-message hidden"></div>
-                    <div id="placement-details" class="hidden">
+                    <!-- This HTML should replace the truncated part of your existing hmi/index.html file -->
+
+                    <h4>Recommended Storage Location</h4>
+                    <div id="placement-details" class="hidden"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Move Product Section -->
+        <div id="move-section" class="section hidden">
+            <div class="card">
+                <h3>Move Product</h3>
+                <form id="move-form">
+                    <div class="grid">
+                        <div class="form-group">
+                            <label for="move-product">Product</label>
+                            <select id="move-product" name="product_id" required>
+                                <option value="">Select Product</option>
+                                <!-- Options will be loaded via JavaScript -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="move-shelf">Shelf</label>
+                            <select id="move-shelf" name="shelf_id" required>
+                                <option value="">Select Shelf</option>
+                                <!-- Options will be loaded via JavaScript -->
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="move-quantity">Quantity</label>
+                            <input type="number" id="move-quantity" name="quantity" min="1" value="1" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn">Move Product</button>
+                </form>
+                <div id="move-result" class="result-message hidden"></div>
+            </div>
+        </div>
+        
+        <!-- Cabinets Overview Section -->
+        <div id="cabinets-section" class="section hidden">
+            <div class="card">
+                <h3>Cabinet Overview</h3>
+                <div class="cabinet-grid" id="cabinets-container">
+                    <!-- Cabinets will be loaded here via JavaScript -->
+                </div>
+                <div id="shelves-container" style="margin-top: 20px;">
+                    <!-- Shelves will be loaded here via JavaScript -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Transactions Section -->
+        <div id="transactions-section" class="section hidden">
+            <div class="card">
+                <h3>Recent Transactions</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Product</th>
+                            <th>Quantity</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-container">
+                        {% for transaction in recent_transactions %}
+                        <tr>
+                            <td>{{ transaction.id }}</td>
+                            <td>{{ transaction.transaction_type }}</td>
+                            <td>{{ transaction.product.name }}</td>
+                            <td>{{ transaction.quantity }}</td>
+                            <td>{{ transaction.timestamp }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Load products for move product form
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load products for the move form
+        fetch('/products/api/list')
+            .then(response => response.json())
+            .then(products => {
+                const productSelect = document.getElementById('move-product');
+                if (productSelect) {
+                    products.forEach(product => {
+                        const option = document.createElement('option');
+                        option.value = product.id;
+                        option.textContent = `${product.name} (Barcode: ${product.barcode})`;
+                        productSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => console.error('Error loading products:', error));
+        
+        // Load shelves for the move form
+        let cabinets = [];
+        
+        fetch('/cabinets/api/list')
+            .then(response => response.json())
+            .then(data => {
+                cabinets = data;
+                return Promise.all(cabinets.map(cabinet => 
+                    fetch(`/cabinets/shelves/${cabinet.id}`).then(response => response.text())
+                ));
+            })
+            .then(shelvesHtmlArray => {
+                const shelfSelect = document.getElementById('move-shelf');
+                if (shelfSelect) {
+                    // Process each cabinet's shelves
+                    shelvesHtmlArray.forEach((html, index) => {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const shelves = doc.querySelectorAll('table tr');
+                        
+                        if (shelves.length > 1) { // Skip header row
+                            const cabinet = cabinets[index];
+                            const optgroup = document.createElement('optgroup');
+                            optgroup.label = cabinet.name;
+                            
+                            for (let i = 1; i < shelves.length; i++) {
+                                const shelf = shelves[i];
+                                const cells = shelf.querySelectorAll('td');
+                                if (cells.length >= 2) {
+                                    try {
+                                        const shelfId = shelf.querySelector('a').href.split('/').pop();
+                                        const option = document.createElement('option');
+                                        option.value = shelfId;
+                                        option.textContent = cells[1].textContent;
+                                        optgroup.appendChild(option);
+                                    } catch (e) {
+                                        console.error('Error extracting shelf ID:', e);
+                                    }
+                                }
+                            }
+                            
+                            shelfSelect.appendChild(optgroup);
+                        }
+                    });
+                }
+            })
+            .catch(error => console.error('Error loading shelves:', error));
+    });
+    </script>
+
+    <!-- Include the JavaScript code from the other artifact -->
+    <script>
+    // JavaScript code to be added at the end of app/templates/hmi/index.html
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize by showing the scan section
+        showSection('scan-section');
+
+        // Set up form submission handlers
+        const scanForm = document.getElementById('scan-form');
+        if (scanForm) {
+            scanForm.addEventListener('submit', handleScanSubmit);
+        }
+
+        const addForm = document.getElementById('add-form');
+        if (addForm) {
+            addForm.addEventListener('submit', handleAddSubmit);
+        }
+
+        const moveForm = document.getElementById('move-form');
+        if (moveForm) {
+            moveForm.addEventListener('submit', handleMoveSubmit);
+        }
+    });
+
+    // Function to show the selected section and hide others
+    function showSection(sectionId) {
+        // Hide all sections
+        const sections = document.querySelectorAll('.section');
+        sections.forEach(section => {
+            section.classList.add('hidden');
+        });
+
+        // Show the selected section
+        const selectedSection = document.getElementById(sectionId);
+        if (selectedSection) {
+            selectedSection.classList.remove('hidden');
+        }
+    }
+
+    // Handle Scan Product form submission
+    function handleScanSubmit(event) {
+        event.preventDefault();
+        
+        const formData = new FormData(event.target);
+        const scanType = formData.get('scan_type');
+        const scanValue = formData.get('scan_value');
+        
+        if (!scanValue) {
+            showMessage('scan-result', 'Please enter a scan value', 'error');
+            return;
+        }
+        
+        // Show loading state
+        showMessage('scan-result', 'Scanning...', 'info');
+        document.getElementById('product-details').classList.add('hidden');
+        
+        // Send AJAX request to scan endpoint
+        fetch('/hmi/scan-product', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showMessage('scan-result', data.error, 'error');
+                return;
+            }
+            
+            if (data.success) {
+                showMessage('scan-result', `Product found: ${data.product.name}`, 'success');
+                displayProductDetails(data.product, data.location);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showMessage('scan-result', 'An error occurred while scanning', 'error');
+        });
+    }
+
+    // Handle Add Product form submission
+    function handleAddSubmit(event) {
+        event.preventDefault();
+        
+        const formData = new FormData(event.target);
+        
+        // Validate form
+        if (!formData.get('name') || !formData.get('barcode') || !formData.get('rfid_tag') || !formData.get('category_id')) {
+            showMessage('add-result', 'Please fill in all required fields', 'error');
+            return;
+        }
+        
+        // Show loading state
+        showMessage('add-result', 'Adding product...', 'info');
+        document.getElementById('placement-details').classList.add('hidden');
+        
+        // Send AJAX request to add product endpoint
+        fetch('/hmi/add-product', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showMessage('add-result', data.error, 'error');
+                return;
+            }
+            
+            if (data.success) {
+                showMessage('add-result', `Product ${formData.get('name')} added successfully`, 'success');
+                
+                // Clear form
+                event.target.reset();
+                
+                // Show placement details if available
+                if (data.placement) {
+                    const placementDiv = document.getElementById('placement-details');
+                    placementDiv.innerHTML = `
+                        <h4>Optimal Placement</h4>
+                        <p>Please place this item in:</p>
+                        <p><strong>Cabinet:</strong> ${data.placement.cabinet_name}</p>
+                        <p><strong>Shelf:</strong> ${data.placement.shelf_name}</p>
+                    `;
+                    placementDiv.classList.remove('hidden');
+                } else if (data.message) {
+                    showMessage('add-result', data.message, 'info');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showMessage('add-result', 'An error occurred while adding product', 'error');
+        });
+    }
+
+    // Handle Move Product form submission
+    function handleMoveSubmit(event) {
+        event.preventDefault();
+        
+        const formData = new FormData(event.target);
+        
+        // Validate form
+        if (!formData.get('product_id') || !formData.get('shelf_id')) {
+            showMessage('move-result', 'Please select a product and shelf', 'error');
+            return;
+        }
+        
+        // Show loading state
+        showMessage('move-result', 'Moving product...', 'info');
+        
+        // Send AJAX request to move product endpoint
+        fetch('/hmi/move-product', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                showMessage('move-result', data.error, 'error');
+                return;
+            }
+            
+            if (data.success) {
+                showMessage('move-result', data.message, 'success');
+                // Clear form
+                event.target.reset();
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showMessage('move-result', 'An error occurred while moving product', 'error');
+        });
+    }
+
+    // Helper function to display product details
+    function displayProductDetails(product, location) {
+        const detailsDiv = document.getElementById('product-details');
+        
+        // Update product details
+        document.getElementById('product-name').textContent = product.name;
+        document.getElementById('product-barcode').textContent = product.barcode;
+        document.getElementById('product-rfid').textContent = product.rfid_tag;
+        document.getElementById('product-quantity').textContent = product.quantity;
+        
+        // Update location information
+        if (location) {
+            document.getElementById('product-location').textContent = 
+                `${location.cabinet_name}, ${location.shelf_name} (Last ${location.transaction_type} on ${formatDate(location.timestamp)})`;
+        } else {
+            document.getElementById('product-location').textContent = 'No location information available';
+        }
+        
+        // Show the details
+        detailsDiv.classList.remove('hidden');
+    }
+
+    // Helper function to show messages
+    function showMessage(elementId, message, type) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.textContent = message;
+            element.className = 'result-message';
+            element.classList.add(type);
+            element.classList.remove('hidden');
+        }
+    }
+
+    // Helper function to format date
+    function formatDate(isoDate) {
+        const date = new Date(isoDate);
+        return date.toLocaleString();
+    }
+
+    // Load cabinets for Cabinets Overview section
+    function loadCabinets() {
+        fetch('/cabinets/api/list')
+            .then(response => response.json())
+            .then(cabinets => {
+                const cabinetsContainer = document.getElementById('cabinets-container');
+                if (cabinetsContainer) {
+                    cabinetsContainer.innerHTML = '';
+                    
+                    cabinets.forEach(cabinet => {
+                        const cabinetCard = document.createElement('div');
+                        cabinetCard.className = 'cabinet-card';
+                        cabinetCard.innerHTML = `
+                            <div class="cabinet-title">
+                                <span class="cabinet-indicator"></span>
+                                ${cabinet.name}
+                            </div>
+                            <div>Shelves: ${cabinet.shelves_count}</div>
+                            <div>Mode: ${cabinet.category_mode}</div>
+                            <button class="btn btn-secondary" onclick="loadShelves(${cabinet.id})">View Shelves</button>
+                        `;
+                        cabinetsContainer.appendChild(cabinetCard);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading cabinets:', error);
+            });
+    }
+
+    // Load shelves for a cabinet
+    function loadShelves(cabinetId) {
+        fetch(`/cabinets/shelves/${cabinetId}`)
+            .then(response => response.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const shelves = doc.querySelectorAll('table tr');
+                
+                const shelvesContainer = document.getElementById('shelves-container');
+                if (shelvesContainer) {
+                    shelvesContainer.innerHTML = `<h3>Shelves in Cabinet ${cabinetId}</h3>`;
+                    
+                    if (shelves.length > 1) { // Skip header row
+                        const list = document.createElement('ul');
+                        list.className = 'shelves-list';
+                        
+                        for (let i = 1; i < shelves.length; i++) {
+                            const shelf = shelves[i];
+                            const cells = shelf.querySelectorAll('td');
+                            if (cells.length >= 3) {
+                                const li = document.createElement('li');
+                                li.innerHTML = `
+                                    <strong>${cells[1].textContent}</strong>: 
+                                    Categories: ${cells[2].textContent}
+                                `;
+                                list.appendChild(li);
+                            }
+                        }
+                        
+                        shelvesContainer.appendChild(list);
+                    } else {
+                        shelvesContainer.innerHTML += '<p>No shelves found for this cabinet.</p>';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading shelves:', error);
+            });
+    }
+
+    // Load recent transactions
+    function loadTransactions() {
+        // This would typically call an API endpoint, but for demonstration we'll use
+        // the transactions that were passed to the template
+        const transactionsContainer = document.getElementById('transactions-container');
+        if (transactionsContainer) {
+            // The transactions container is already populated by the server-side rendering
+        }
+    }
+
+    // Additional event listeners for cabinet and transaction views
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set up cabinet view handler
+        const cabinetsSection = document.getElementById('cabinets-section');
+        if (cabinetsSection) {
+            cabinetsSection.addEventListener('show', loadCabinets);
+        }
+        
+        // Set up transactions view handler
+        const transactionsSection = document.getElementById('transactions-section');
+        if (transactionsSection) {
+            transactionsSection.addEventListener('show', loadTransactions);
+        }
+    });
+
+    // Create custom 'show' events for sections
+    const originalShowSection = showSection;
+    showSection = function(sectionId) {
+        originalShowSection(sectionId);
+        
+        const section = document.getElementById(sectionId);
+        if (section) {
+            const event = new Event('show');
+            section.dispatchEvent(event);
+        }
+    };
+    </script>
+    </body>
+    </html>
+                        
