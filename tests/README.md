@@ -29,6 +29,12 @@ To run a specific test file:
 
 ```bash
 pytest tests/test_models.py
+
+# To run all tests except RFID
+pytest tests/test_models.py tests/test_views.py tests/test_api.py tests/test_config.py
+
+# Or to skip specific test files
+pytest --ignore=tests/test_rfid.py --ignore=tests/test_opcua.py
 ```
 
 See the full [TESTING.md](../TESTING.md) guide for more options and details.
