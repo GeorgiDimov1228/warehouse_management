@@ -1,43 +1,43 @@
-from flask import Flask
+from flask import Flask, redirect, url_for, session
 import logging
 import os
 from dotenv import load_dotenv
-from flask import redirect, url_for, session
 
-# Load environment variables from .env file
 load_dotenv()
 
 def create_app(test_config=None):
     """Create and configure the Flask application"""
-    # Create and configure the app
     app = Flask(__name__, instance_relative_config=True)
     
-    # Load the default configuration
     app.config.from_object('app.config.Config')
-    
-    # Override config with instance config when not testing
     if test_config is None:
         app.config.from_pyfile('config.py', silent=True)
     else:
         app.config.from_mapping(test_config)
     
-    # Ensure the instance folder exists
+    required_configs = ['PLC_OPC_UA_URL', 'DATABASE', 'BACKUP_DIR', 'BACKUP_INTERVAL']
+    for key in required_configs:
+        if key not in app.config:
+            raise ValueError(f"Required config key '{key}' is missing")
+
     try:
         os.makedirs(app.instance_path, exist_ok=True)
-    except OSError:
-        pass
+    except OSError as e:
+        logging.error(f"Failed to create instance folder: {str(e)}")
+        raise
     
-    # Configure logging
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(os.path.join(app.instance_path, 'app.log'))
+        ]
     )
     
-    # Initialize SQLAlchemy database
     from app.models import db, init_db
     init_db(app)
     
-    # Register blueprints
     from app.routes.auth import auth_bp
     from app.routes.product import product_bp
     from app.routes.category import category_bp
@@ -52,44 +52,48 @@ def create_app(test_config=None):
     app.register_blueprint(rfid_bp)
     app.register_blueprint(cabinet_bp)
     
-
     @app.route('/')
     def index():
         if 'user_id' in session:
-            # If user is logged in, redirect to dashboard
             return redirect(url_for('product.dashboard'))
-        else:
-            # If not logged in, redirect to login page
-            return redirect(url_for('auth.login'))
+        return redirect(url_for('auth.login'))
 
-    # A simple route to check if the app is running
     @app.route('/health')
     def health_check():
-        return {'status': 'healthy'}
+        from app.services.opcua_service import is_plc_connected
+        return {
+            'status': 'healthy',
+            'plc_connected': is_plc_connected() if not test_config else 'N/A'
+        }
     
-    # Initialize database tables
     with app.app_context():
         from app.services.database import initialize_database
         try:
             initialize_database()
         except Exception as e:
             app.logger.error(f"Database initialization error: {str(e)}")
+            raise
     
-    # Start services after app is fully configured
-    @app.before_first_request
     def start_services():
-        # Start backup thread
         from app.services.backup_service import start_backup_thread
         try:
             start_backup_thread()
         except Exception as e:
-            app.logger.error(f"Backup service error: {str(e)}")
-        
-        # Start OPC UA server
-        from app.services.opcua_service import start_opcua_server
+            app.logger.error(f"Backup service failed to start: {str(e)}")
+            raise
+        app.logger.info("Operating in OPC UA client-only mode - connecting to Siemens PLC")
+
+    @app.teardown_appcontext
+    def shutdown_services(exception=None):
+        from app.services.opcua_service import shutdown_opcua_client
         try:
-            start_opcua_server()
+            shutdown_opcua_client()
         except Exception as e:
-            app.logger.error(f"OPC UA service error: {str(e)}")
-    
+            app.logger.error(f"Error shutting down OPC UA client: {str(e)}")
+
+    if not test_config:
+        @app.before_first_request
+        def initialize_services():
+            start_services()
+
     return app

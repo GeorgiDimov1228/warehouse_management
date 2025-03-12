@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warehouse Management HMI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #333;
+            color: white;
+            padding: 20px;
+        }
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .card {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-secondary {
+            background-color: #2196F3;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .cabinet-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .cabinet-card {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        .cabinet-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .shelves-list {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        .shelves-list li {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .cabinet-indicator {
+            display: inline-block;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 5px;
+            background-color: #ccc;
+        }
+        .indicator-green {
+            background-color: #4CAF50;
+        }
+        .indicator-yellow {
+            background-color: #FFEB3B;
+        }
+        .indicator-red {
+            background-color: #F44336;
+        }
+        .hidden {
+            display: none;
+        }
+        .result-message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #E8F5E9;
+            color: #2E7D32;
+            border: 1px solid #C8E6C9;
+        }
+        .error {
+            background-color: #FFEBEE;
+            color: #C62828;
+            border: 1px solid #FFCDD2;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h1>Warehouse HMI</h1>
+            <ul>
+                <li><a href="#" style="color: white; text-decoration: none;" onclick="showSection('scan-section')">Scan Product</a></li>
+                <li><a href="#" style="color: white; text-decoration: none;" onclick="showSection('add-section')">Add Product</a></li>
+                <li><a href="#" style="color: white; text-decoration: none;" onclick="showSection('move-section')">Move Product</a></li>
+                <li><a href="#" style="color: white; text-decoration: none;" onclick="showSection('cabinets-section')">Cabinets Overview</a></li>
+                <li><a href="#" style="color: white; text-decoration: none;" onclick="showSection('transactions-section')">Recent Transactions</a></li>
+            </ul>
+            <div style="margin-top: 20px;">
+                <a href="{{ url_for('auth.logout') }}" style="color: white; text-decoration: none;">Logout</a>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="header">
+                <h2>Warehouse Management HMI</h2>
+                <div>
+                    <span>User: {{ session.get('username') }}</span>
+                </div>
+            </div>
+            
+            <!-- Scan Product Section -->
+            <div id="scan-section" class="section">
+                <div class="card">
+                    <h3>Scan Product</h3>
+                    <form id="scan-form">
+                        <div class="form-group">
+                            <label for="scan-type">Scan Type</label>
+                            <select id="scan-type" name="scan_type">
+                                <option value="barcode">Barcode</option>
+                                <option value="rfid">RFID Tag</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="scan-value">Scan Value</label>
+                            <input type="text" id="scan-value" name="scan_value" required>
+                        </div>
+                        <button type="submit" class="btn">Scan</button>
+                    </form>
+                    <div id="scan-result" class="result-message hidden"></div>
+                    <div id="product-details" class="hidden">
+                        <h4>Product Details</h4>
+                        <table>
+                            <tr>
+                                <th>Name</th>
+                                <td id="product-name"></td>
+                            </tr>
+                            <tr>
+                                <th>Barcode</th>
+                                <td id="product-barcode"></td>
+                            </tr>
+                            <tr>
+                                <th>RFID Tag</th>
+                                <td id="product-rfid"></td>
+                            </tr>
+                            <tr>
+                                <th>Quantity</th>
+                                <td id="product-quantity"></td>
+                            </tr>
+                            <tr>
+                                <th>Location</th>
+                                <td id="product-location"></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Add Product Section -->
+            <div id="add-section" class="section hidden">
+                <div class="card">
+                    <h3>Add New Product</h3>
+                    <form id="add-form">
+                        <div class="grid">
+                            <div class="form-group">
+                                <label for="product-name">Product Name</label>
+                                <input type="text" id="product-name-input" name="name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="product-barcode">Barcode</label>
+                                <input type="text" id="product-barcode-input" name="barcode" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="product-rfid">RFID Tag</label>
+                                <input type="text" id="product-rfid-input" name="rfid_tag" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="product-category">Category</label>
+                                <select id="product-category" name="category_id" required>
+                                    <option value="">Select Category</option>
+                                    {% for category in categories %}
+                                    <option value="{{ category.id }}">{{ category.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="product-quantity">Quantity</label>
+                                <input type="number" id="product-quantity-input" name="quantity" min="1" value="1" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">Add Product</button>
+                    </form>
+                    <div id="add-result" class="result-message hidden"></div>
+                    <div id="placement-details" class="hidden">

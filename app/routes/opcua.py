@@ -1,39 +1,37 @@
-from flask import Blueprint, request, jsonify, current_app, session
-from app.services.opcua_service import read_opcua_value, write_opcua_value, connect_opcua_client, opcua_log
+from flask import Blueprint, request, jsonify, session, current_app
+from app.services.opcua_service import read_opcua_value, write_opcua_value, opcua_client, is_plc_connected
 from app.models import db
 from app.models.product import Product
 import logging
 from sqlalchemy import func
+from functools import wraps
 
 opcua_bp = Blueprint('opcua', __name__, url_prefix='/opcua')
+
+def require_auth(f):
+    """Decorator to enforce authentication"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 @opcua_bp.route('/status', methods=['GET'])
 def opcua_status():
     """Check OPC UA connection status"""
-    # Allow status check without authentication for dashboard display
     try:
-        client = connect_opcua_client()
-        if client:
-            try:
-                client.disconnect()
-            except:
-                pass
-            return jsonify({'status': 'Connected'})
-        
-        logging.warning("Failed to connect to OPC UA server")
-        return jsonify({'status': 'Disconnected', 'error': 'Cannot connect to OPC UA server'})
+        connected = is_plc_connected()
+        return jsonify({'status': 'Connected' if connected else 'Disconnected'})
     except Exception as e:
-        logging.error(f"Error in OPCUA status check: {str(e)}")
-        return jsonify({'status': 'Error', 'error': str(e)})
+        logging.error(f"Error in OPC UA status check: {str(e)}")
+        return jsonify({'status': 'Error', 'error': str(e)}), 500
 
 @opcua_bp.route('/read', methods=['POST'])
+@require_auth
 def opcua_read():
     """Read a value from OPC UA server"""
-    # Verify authentication for sensitive operations
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
-        
-    data = request.json
+    data = request.get_json()
     node_id = data.get('node_id')
     
     if not node_id:
@@ -41,20 +39,15 @@ def opcua_read():
     
     result = read_opcua_value(node_id)
     if isinstance(result, dict) and 'error' in result:
-        logging.error(f"Error reading OPC UA node {node_id}: {result['error']}")
         return jsonify(result), 500
     
-    logging.info(f"Successfully read OPC UA node {node_id}: {result}")
-    return jsonify({'value': result})
+    return jsonify({'node_id': node_id, 'value': result})
 
 @opcua_bp.route('/write', methods=['POST'])
+@require_auth
 def opcua_write():
     """Write a value to OPC UA server"""
-    # Verify authentication for sensitive operations
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
-        
-    data = request.json
+    data = request.get_json()
     node_id = data.get('node_id')
     value = data.get('value')
     
@@ -63,163 +56,140 @@ def opcua_write():
     
     result = write_opcua_value(node_id, value)
     if 'error' in result:
-        logging.error(f"Error writing to OPC UA node {node_id}: {result['error']}")
         return jsonify(result), 500
     
-    logging.info(f"Successfully wrote to OPC UA node {node_id}: {value}")
-    return jsonify(result)
+    return jsonify({'node_id': node_id, **result})
 
 @opcua_bp.route('/get-item-count', methods=['GET'])
 def get_item_count():
-    """Get item count from OPC UA"""
-    # For item count, we'll use the database directly
-    total_count = db.session.query(func.sum(Product.quantity)).scalar() or 0
-    
-    # Also update the OPC UA server with this value
+    """Get item count from database and optionally sync with OPC UA"""
     try:
-        write_opcua_value('ns=2;s=ItemCount', total_count)
+        total_count = db.session.query(func.sum(Product.quantity)).scalar() or 0
+        
+        # Sync with OPC UA if configured
+        if current_app.config.get('SYNC_ITEM_COUNT', True):
+            result = write_opcua_value(current_app.config.get('OPCUA_ITEM_COUNT_NODE', 'ns=2;s=ItemCount'), total_count)
+            if 'error' in result:
+                logging.warning(f"Failed to sync ItemCount to OPC UA: {result['error']}")
+        
+        return jsonify({'item_count': total_count})
     except Exception as e:
-        logging.warning(f"Failed to update OPC UA ItemCount: {str(e)}")
-    
-    return jsonify({'item_count': total_count})
+        logging.error(f"Error getting item count: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @opcua_bp.route('/set-item-count', methods=['POST'])
+@require_auth
 def set_item_count():
     """Set item count in OPC UA"""
-    # Verify authentication for sensitive operations
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
-        
-    data = request.json
+    data = request.get_json()
     new_count = data.get('item_count')
     
-    if not isinstance(new_count, int):
-        return jsonify({'error': 'Invalid item count'}), 400
+    if not isinstance(new_count, int) or new_count < 0:
+        return jsonify({'error': 'Item count must be a non-negative integer'}), 400
     
-    result = write_opcua_value('ns=2;s=ItemCount', new_count)
+    node_id = current_app.config.get('OPCUA_ITEM_COUNT_NODE', 'ns=2;s=ItemCount')
+    result = write_opcua_value(node_id, new_count)
     if 'error' in result:
-        logging.error(f"Error updating item count in OPC UA: {result['error']}")
         return jsonify(result), 500
     
-    logging.info(f"Item count updated in OPC UA: {new_count}")
-    return jsonify({'message': 'Item count updated successfully'})
+    return jsonify({'message': 'Item count updated successfully', 'item_count': new_count})
 
 @opcua_bp.route('/get-traffic-light', methods=['GET'])
 def get_traffic_light_status():
     """Get traffic light status from OPC UA"""
-    # This endpoint could be used without authentication for display purposes
-    result = read_opcua_value('ns=2;s=TrafficLightStatus')
+    node_id = current_app.config.get('OPCUA_TRAFFIC_LIGHT_NODE', 'ns=2;s=TrafficLightStatus')
+    result = read_opcua_value(node_id)
     if isinstance(result, dict) and 'error' in result:
-        logging.error(f"Error reading traffic light status: {result['error']}")
         return jsonify(result), 500
     
     return jsonify({'traffic_light_status': result})
 
 @opcua_bp.route('/set-traffic-light', methods=['POST'])
+@require_auth
 def set_traffic_light_status():
     """Set traffic light status in OPC UA"""
-    # Verify authentication for sensitive operations
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
-        
-    data = request.json
+    data = request.get_json()
     new_status = data.get('traffic_light_status')
     
-    if new_status not in ['RED', 'YELLOW', 'GREEN', 'OFF']:
-        return jsonify({'error': 'Invalid status'}), 400
+    valid_statuses = ['RED', 'YELLOW', 'GREEN', 'OFF']
+    if new_status not in valid_statuses:
+        return jsonify({'error': f"Invalid status. Must be one of {valid_statuses}"}), 400
     
-    result = write_opcua_value('ns=2;s=TrafficLightStatus', new_status)
+    node_id = current_app.config.get('OPCUA_TRAFFIC_LIGHT_NODE', 'ns=2;s=TrafficLightStatus')
+    result = write_opcua_value(node_id, new_status)
     if 'error' in result:
-        logging.error(f"Error setting traffic light status: {result['error']}")
         return jsonify(result), 500
     
-    logging.info(f"Traffic light status updated to: {new_status}")
-    return jsonify({'message': 'Traffic light status updated successfully'})
+    return jsonify({'message': 'Traffic light status updated successfully', 'traffic_light_status': new_status})
 
 @opcua_bp.route('/get-hmi-status', methods=['GET'])
 def get_hmi_status():
     """Get HMI status from OPC UA"""
-    # This endpoint could be used without authentication for display purposes
-    result = read_opcua_value('ns=2;s=HMIStatus')
+    node_id = current_app.config.get('OPCUA_HMI_STATUS_NODE', 'ns=2;s=HMIStatus')
+    result = read_opcua_value(node_id)
     if isinstance(result, dict) and 'error' in result:
-        logging.error(f"Error reading HMI status: {result['error']}")
         return jsonify(result), 500
     
     return jsonify({'hmi_status': result})
 
 @opcua_bp.route('/set-hmi-command', methods=['POST'])
+@require_auth
 def set_hmi_command():
     """Set HMI command in OPC UA"""
-    # Verify authentication for sensitive operations
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
-        
-    data = request.json
+    data = request.get_json()
     new_command = data.get('hmi_command')
     
-    if not isinstance(new_command, str) or new_command not in current_app.config['HMI_COMMANDS']:
-        return jsonify({'error': 'Invalid HMI command'}), 400
+    valid_commands = current_app.config.get('HMI_COMMANDS', ['NONE', 'START', 'STOP', 'RESET'])
+    if not isinstance(new_command, str) or new_command not in valid_commands:
+        return jsonify({'error': f"Invalid HMI command. Must be one of {valid_commands}"}), 400
     
-    result = write_opcua_value('ns=2;s=HMICommand', new_command)
+    node_id = current_app.config.get('OPCUA_HMI_COMMAND_NODE', 'ns=2;s=HMICommand')
+    result = write_opcua_value(node_id, new_command)
     if 'error' in result:
-        logging.error(f"Error setting HMI command: {result['error']}")
         return jsonify(result), 500
     
-    logging.info(f"HMI command updated to: {new_command}")
-    return jsonify({'message': 'HMI command updated successfully'})
+    return jsonify({'message': 'HMI command updated successfully', 'hmi_command': new_command})
 
 @opcua_bp.route('/update', methods=['POST'])
+@require_auth
 def opcua_update():
     """Update a node in OPC UA server"""
-    # Verify authentication for sensitive operations
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
-        
-    data = request.json
+    data = request.get_json()
     node_id = data.get('node_id')
     value = data.get('value')
     
     if not node_id or value is None:
-        return jsonify({'error': 'Invalid node_id or value'}), 400
+        return jsonify({'error': 'Missing node_id or value parameter'}), 400
     
     result = write_opcua_value(node_id, value)
     if 'error' in result:
-        opcua_log(node_id, value, 'Failed', result['error'])
         return jsonify(result), 500
     
-    opcua_log(node_id, value, 'Success')
-    return jsonify({'message': 'OPC UA updated successfully'})
+    return jsonify({'message': 'OPC UA node updated successfully', 'node_id': node_id, 'value': value})
 
 @opcua_bp.route('/sync-inventory', methods=['POST'])
+@require_auth
 def sync_inventory():
     """Sync inventory data between database and OPC UA"""
-    # Verify authentication for sensitive operations
-    if 'user_id' not in session:
-        return jsonify({'error': 'Authentication required'}), 401
-    
     try:
-        # Get total quantity from database
         total_quantity = db.session.query(func.sum(Product.quantity)).scalar() or 0
         
-        # Update OPC UA item count
-        write_opcua_value('ns=2;s=ItemCount', total_quantity)
-        
-        # Get top 3 categories by product count to show on HMI display
+        item_node = current_app.config.get('OPCUA_ITEM_COUNT_NODE', 'ns=2;s=ItemCount')
+        result = write_opcua_value(item_node, total_quantity)
+        if 'error' in result:
+            logging.warning(f"Failed to sync ItemCount: {result['error']}")
+
         top_categories = db.session.query(
-            Product.category_id, 
+            Product.category_id,
             func.count(Product.id).label('count')
-        ).group_by(
-            Product.category_id
-        ).order_by(
-            func.count(Product.id).desc()
-        ).limit(3).all()
+        ).group_by(Product.category_id).order_by(func.count(Product.id).desc()).limit(3).all()
         
         category_data = ','.join([f"{cat[0]}:{cat[1]}" for cat in top_categories if cat[0]])
+        cat_node = current_app.config.get('OPCUA_CATEGORY_DATA_NODE', 'ns=2;s=CategoryData')
+        result = write_opcua_value(cat_node, category_data)
+        if 'error' in result:
+            logging.warning(f"Failed to sync CategoryData: {result['error']}")
         
-        # Update category data in OPC UA
-        write_opcua_value('ns=2;s=CategoryData', category_data)
-        
-        logging.info(f"Inventory data synced with OPC UA: Items={total_quantity}, Categories={category_data}")
         return jsonify({
             'message': 'Inventory data synced with OPC UA',
             'total_quantity': total_quantity,
@@ -227,4 +197,4 @@ def sync_inventory():
         })
     except Exception as e:
         logging.error(f"Error syncing inventory data: {str(e)}")
-        return jsonify({'error': f'Error syncing inventory data: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
