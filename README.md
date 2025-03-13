@@ -5,18 +5,20 @@ A Flask-based warehouse management system with OPC UA integration for industrial
 ## Features
 
 - Product inventory management with categories
-- Cabinet and shelf organization
+- Cabinet and shelf organization with category-based assignment
 - RFID tracking for products and user authentication
-- OPC UA integration for industrial automation
+- OPC UA integration for industrial PLC communication
 - Automated database backups
-- User authentication and role-based access
+- User authentication and role-based access (admin, operator, user)
 - Transaction history logging
+- Dashboard with real-time statistics
+- HMI (Human-Machine Interface) for warehouse operations
 
 ## Prerequisites
 
 - Python 3.8+ installed
 - SQLite (included with Python)
-- OPC UA server (for testing)
+- OPC UA server (for PLC connectivity testing)
 
 ## Installation
 
@@ -45,8 +47,8 @@ pip install -r requirements.txt
 ```
 
 4. Configure environment variables:
-   - The default configuration is in the `.env` file
-   - Modify as needed for your environment
+   - Copy `.env.example` to `.env` (or use the provided `.env` file)
+   - Modify as needed for your environment, especially the PLC_OPC_UA_URL
 
 ### Option 2: Docker Installation (Recommended)
 
@@ -72,7 +74,7 @@ This will:
 
 The application will automatically create the database and required tables on first run. 
 
-To initialize the database manually:
+To initialize the database with test data:
 ```bash
 flask shell
 ```
@@ -84,17 +86,29 @@ initialize_database()
 exit()
 ```
 
+Or use the provided script:
+```bash
+python init_db.py
+```
+
+This will create:
+- Default roles (admin, user, operator)
+- Test users (admin/admin123, operator/operator123)
+- Test categories, cabinets, shelves, and products
+
 ## Running the Application
 
 ### Option 1: Local Run
 1. Start the application:
 ```bash
+python run.py
+# or
 flask run
 ```
 
 2. Navigate to `http://localhost:5000` in your web browser
    - For the health check endpoint: `http://localhost:5000/health`
-   - For login: `http://localhost:5000/auth/login`
+   - For login: `http://localhost:5000/auth/login` (use admin/admin123)
 
 ### Option 2: Running with Docker (Recommended)
 1. Start the application:
@@ -114,13 +128,25 @@ docker-compose logs -f
 
 4. Navigate to `http://localhost:5000` in your web browser
    - For the health check endpoint: `http://localhost:5000/health`
-   - For login: `http://localhost:5000/auth/login`
+   - For login: `http://localhost:5000/auth/login` (use admin/admin123)
+
+## System Architecture
+
+The application follows a modular architecture:
+
+- `app/__init__.py` - Application factory
+- `app/config.py` - Configuration settings
+- `app/models/` - Database models (User, Product, Category, Cabinet, Shelf, Transaction)
+- `app/routes/` - Route handlers for different sections (auth, product, category, cabinet, opcua, rfid)
+- `app/services/` - Service modules (OPC UA client, database, backups)
+- `app/templates/` - HTML templates for web interface
+- `run.py` - Entry point to run the application
 
 ## Testing the OPC UA Integration
 
-The application includes an OPC UA server and client for testing:
+The application includes an OPC UA client for connecting to PLCs:
 
-1. Verify the OPC UA server is running:
+1. Verify the OPC UA server connection:
 ```bash
 curl http://localhost:5000/opcua/status
 ```
@@ -135,24 +161,42 @@ curl -X POST -H "Content-Type: application/json" -d '{"node_id":"ns=2;s=ItemCoun
 curl -X POST -H "Content-Type: application/json" -d '{"node_id":"ns=2;s=ItemCount", "value":100}' http://localhost:5000/opcua/write
 ```
 
+4. Sync inventory with OPC UA:
+```bash
+curl -X POST http://localhost:5000/opcua/sync-inventory
+```
+
 ## RFID Testing
 
 For testing RFID functionality:
 
 1. Authenticate a user with RFID:
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"rfid_tag":"your_rfid_tag"}' http://localhost:5000/rfid/auth
+curl -X POST -H "Content-Type: application/json" -d '{"rfid_tag":"admin-rfid-001"}' http://localhost:5000/rfid/auth
 ```
 
 2. Load items using RFID:
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"rfid_tag":"user_rfid_tag", "product_rfid":"product_rfid_tag", "quantity":1, "shelf_id":1}' http://localhost:5000/rfid/load
+curl -X POST -H "Content-Type: application/json" -d '{"rfid_tag":"admin-rfid-001", "product_rfid":"rfid-ard-001", "quantity":1, "shelf_id":1}' http://localhost:5000/rfid/load
 ```
 
 3. Get items using RFID:
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"rfid_tag":"user_rfid_tag", "product_id":1, "quantity":1, "shelf_id":1}' http://localhost:5000/rfid/get
+curl -X POST -H "Content-Type: application/json" -d '{"rfid_tag":"admin-rfid-001", "product_id":1, "quantity":1, "shelf_id":1}' http://localhost:5000/rfid/get
 ```
+
+## HMI Interface
+
+The system includes an HMI (Human-Machine Interface) for warehouse operations:
+
+1. Access the HMI at: `http://localhost:5000/hmi/`
+
+Features include:
+- Product scanning (barcode/RFID)
+- Adding new products with optimal shelf placement
+- Moving products between shelves
+- Cabinet overview
+- Transaction history
 
 ## API Endpoints
 
@@ -208,20 +252,49 @@ curl -X POST -H "Content-Type: application/json" -d '{"rfid_tag":"user_rfid_tag"
 - `POST /rfid/load` - Load items with RFID
 - `POST /rfid/get` - Get items with RFID
 
+### HMI
+- `GET /hmi/` - Main HMI interface
+- `POST /hmi/add-product` - Add a new product and get placement
+- `POST /hmi/scan-product` - Scan a product by barcode or RFID
+- `POST /hmi/move-product` - Move a product to a new location
+
 ## Automated Backups
 
 The application automatically performs database backups according to the interval specified in the `.env` file. By default, backups are created every 24 hours in the `backups` directory.
 
-## Architecture
+You can manually trigger a backup with:
 
-The application follows a modular architecture:
+```python
+from app.services.backup_service import backup_database
+from app import create_app
+app = create_app()
+with app.app_context():
+    backup_database()
+```
 
-- `app/__init__.py` - Application factory
-- `app/config.py` - Configuration settings
-- `app/models/` - Database models
-- `app/routes/` - Route handlers
-- `app/services/` - Service modules for OPC UA, database, backups
-- `run.py` - Entry point to run the application
+## Running Tests
+
+The system includes a comprehensive test suite:
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage reporting
+pytest --cov=app
+
+# Run a specific test file
+pytest tests/test_models.py
+
+# Using the run_tests.py helper
+python run_tests.py -v -c
+```
+
+### Docker Test Execution
+
+```bash
+docker compose exec webapp python run_tests.py
+```
 
 ## Security Notes
 
@@ -239,12 +312,6 @@ If you encounter database issues, you can reset the database:
 
 With Docker:
 ```bash
-docker compose exec warehouse_management-webapp-1 python3 init_db.py
-
-docker exec -it warehouse_management-webapp-1 python3 init_db.py
-docker exec -it warehouse_management-webapp-1 python3 quick_test.py
-
-
 docker compose exec webapp python -c "from app.services.database import reset_database; from app import create_app; app = create_app(); with app.app_context(): reset_database()"
 ```
 
@@ -259,7 +326,7 @@ with app.app_context():
 ```
 
 ### Dependency Issues
-If you encounter dependency issues like the `url_quote` error with newer Python versions:
+If you encounter dependency issues:
 - Use the Docker setup which uses Python 3.8
 - If using local installation, create a virtual environment with Python 3.8:
   ```bash
@@ -274,8 +341,14 @@ If you encounter dependency issues like the `url_quote` error with newer Python 
 
 ### Logging
 - With Docker: `docker-compose logs -f`
-- Without Docker: Check the log file defined in `.env` (default: `warehouse_log.log`)
-- Set the log level in `app/__init__.py`
+- Without Docker: Check the log file in the instance directory
+- Adjust log level in `app/__init__.py` if needed
+
+### Quick Test Script
+To verify the application can be initialized correctly:
+```bash
+python quick_test.py
+```
 
 ### Docker-Specific Issues
 - If the container fails to start, check the logs: `docker-compose logs -f`
