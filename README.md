@@ -26,7 +26,7 @@ A Flask-based warehouse management system with OPC UA integration for industrial
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/Limoncho-san/warehouse_management.git
 cd warehouse-management-system
 ```
 
@@ -54,7 +54,7 @@ pip install -r requirements.txt
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/Limoncho-san/warehouse_management.git
 cd warehouse-management-system
 ```
 
